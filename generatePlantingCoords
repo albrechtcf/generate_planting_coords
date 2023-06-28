@@ -1,0 +1,71 @@
+### clear total workspace ------------------------------------------------
+# if(!is.null(dev.list())) dev.off() ; rm(list = ls()) ; cat("\f")
+
+### preliminaries --------------------------------------------------------
+setwd("C:/Users/albrechtcf/Desktop/wc_OTHER/SFA_era/rootin_n_tootin")
+library(ggplot2)
+library(readxl)
+
+### read in data ---------------------------------------------------------
+readin <- readxl::read_xlsx("tree_params.xlsx")
+
+### Function to generate planting coordinates for trees ------------------
+generatePlantingCoords <- function(tree_params, field_x_dim = 1000, field_y_dim=1000, save_to_csv = TRUE, seed = 99) {
+  
+  # Set seed for reproducibility of random number vector
+  set.seed(seed) 
+  
+  # Create a tibble with a column for random numbers
+  # Each random number corresponds to a tree species
+  # The number of rows assumes 1X1 spacing - this is likely too close but excess is trimmed later
+  tree_sequence <- tibble(
+    index = 1:(field_x_dim * field_y_dim),                                       
+    species_index = sample(1:nrow(tree_params), size = (field_x_dim * field_y_dim), replace = TRUE)) 
+  
+  # Generate and populate a new tibble with tree species identities and XY coordinates of planting position
+  for (i in tree_sequence$index) {
+    if (i == tree_sequence$index[1]) {
+      # Define tibble for inputting tree species ID and planting coordinates and populate first row
+      output <- tibble(
+        tree = tree_params$tree_species[tree_sequence$species_index][i],
+        x = max(tree_params$min_spacing),
+        y = max(tree_params$min_spacing)
+      )
+    } else {
+      output[i,1] <- tree_params$tree_species[tree_sequence$species_index][i]
+      
+      # Check if the y-coordinate is within the field dimensions
+      if ((output[i-1,3] + tree_params$min_spacing[tree_sequence$species_index][i]) < field_y_dim) {
+        output[i,2] <- output[i-1,2]
+        
+        # Check if the current tree's minimum spacing is greater than the previous tree's
+        if (tree_params$min_spacing[tree_sequence$species_index][i] > tree_params$min_spacing[tree_sequence$species_index][i-1]) {
+          output[i,3] <- output[i-1,3] + tree_params$min_spacing[tree_sequence$species_index][i]
+        } else {
+          output[i,3] <- output[i-1,3] + tree_params$min_spacing[tree_sequence$species_index][i-1]
+        }
+      } else {
+        output[i,2] <- output[i-1,2] + max(tree_params$min_spacing)
+        output[i,3] <- max(tree_params$min_spacing)
+      }
+      
+      # Check if the x and y coordinates are within the field dimensions
+      if ((output[i,2] + max(tree_params$min_spacing)) > field_x_dim & 
+          (output[i,3] + max(tree_params$min_spacing)) > field_y_dim) {
+        break
+      }
+    }
+  }
+  
+  # Plot output to screen
+  plot_output <- ggplot(output, aes(x,y)) + geom_point(aes(color = factor(tree)))
+  print(plot_output)
+  
+  # Save coordinates as .csv if save_to_csv is TRUE
+  if (save_to_csv == TRUE) {
+    write.csv(output, "planting_coordinates.csv")
+  } 
+} # End of function
+
+# Run function
+generatePlantingCoords(tree_params = readin)
